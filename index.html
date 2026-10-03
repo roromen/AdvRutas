@@ -1,0 +1,162 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Monte">
+<meta name="theme-color" content="#14212b"><link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<title>Monte</title>
+<style>
+:root{--bg:#14212b;--panel:#1d2f3b;--line:#2f4756;--ink:#e6eef2;--dim:#8fa7b3;--larch:#e8c547;--rock:#e0533d;--moss:#8fc275;--ice:#7cc4e0}
+*{box-sizing:border-box;margin:0}html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.4 "Avenir Next",system-ui,sans-serif;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top)}
+.v{display:none;flex:1;min-height:0;position:relative}.v.on{display:flex;flex-direction:column}
+#map{flex:1}
+#bar{display:flex;gap:6px;padding:8px;overflow-x:auto;background:var(--bg)}
+.chip{flex:none;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 11px;border-radius:99px;font:inherit}
+.chip.on{background:var(--larch);color:#14212b;border-color:var(--larch);font-weight:700}
+#q{flex:1;min-width:120px;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px;font:inherit}
+#go{position:absolute;z-index:500;left:50%;transform:translateX(-50%);top:10px;background:var(--rock);color:#fff;border:0;padding:10px 16px;border-radius:99px;font-weight:700}
+#sheet{position:absolute;z-index:600;left:0;right:0;bottom:0;max-height:62%;overflow:auto;background:var(--panel);border-top:3px solid var(--larch);border-radius:16px 16px 0 0;padding:14px;display:none}
+#sheet h2{font-size:18px;margin-bottom:4px}.dim{color:var(--dim)}
+.tag{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:2px 7px;margin:2px 3px 2px 0;font-size:13px}
+.day{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)}
+.btn{background:var(--moss);color:#14212b;border:0;border-radius:10px;padding:9px 13px;font:inherit;font-weight:700;margin:8px 6px 0 0}
+.btn.s{background:var(--bg);color:var(--ink);border:1px solid var(--line)}
+a{color:var(--ice)}
+.pad{padding:14px;overflow:auto;flex:1}
+.pad h3{margin:16px 0 6px;color:var(--larch);font-size:15px}
+.stop{background:var(--panel);border-left:4px solid var(--moss);border-radius:8px;padding:9px;margin:6px 0}
+.stop.v2{border-color:var(--rock)}.leg{color:var(--dim);padding:2px 12px;font-size:13px}
+input[type=number],input[type=time]{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px;width:84px;font:inherit}
+#tabs{display:flex;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+#tabs button{flex:1;background:none;border:0;color:var(--dim);padding:11px 0;font:inherit}
+#tabs button.on{color:var(--larch);font-weight:700}
+.pin{font-size:22px;text-shadow:0 1px 3px #000}
+#toast{position:fixed;z-index:999;top:70px;left:50%;transform:translateX(-50%);background:#000c;padding:8px 14px;border-radius:99px;display:none}
+</style></head><body>
+
+<div class="v on" id="v-map">
+ <div id="bar">
+  <input id="q" placeholder="Buscar lugar…" enterkeyhint="search">
+  <button class="chip on" data-k="se">🥾 Senderos</button>
+  <button class="chip" data-k="vf">⛓️ Ferratas</button>
+  <button class="chip" data-k="cl">🧗 Escalada</button>
+  <button class="chip" data-k="cp">⛺ Acampada</button>
+  <button class="chip" data-k="fo">🌲 Bosques</button>
+  <button class="chip" id="rm">📍 Modo ruta</button>
+  <button class="chip" id="tp">🗺️ Topo</button>
+ </div>
+ <div id="map"></div><button id="go">Buscar en esta zona</button>
+ <div id="sheet"></div>
+</div>
+
+<div class="v" id="v-ruta"><div class="pad">
+ <h3>Mi ruta</h3>
+ <p class="dim">Activa «📍 Modo ruta» en el mapa y toca puntos, o pulsa «+ Ruta» en una ferrata o zona. Marca cuáles son vía ferrata.</p>
+ <p style="margin-top:8px">Salida <input type="time" id="t0" value="08:00"> &nbsp;Ritmo <input type="number" id="pace" value="4" step=".5"> km/h</p>
+ <div id="stops"></div>
+ <button class="btn" onclick="calc()">Calcular tiempos</button><button class="btn s" onclick="shareR()">Compartir</button><button class="btn s" onclick="S=[];save();rs()">Vaciar</button>
+ <div id="rsum" style="margin-top:12px"></div>
+</div></div>
+
+<div class="v" id="v-webs"><div class="pad">
+ <h3>En esta zona del mapa</h3><div id="here"></div>
+ <h3>Senderos y rutas</h3>
+ <p><a href="https://www.wikiloc.com">Wikiloc</a> · <a href="https://www.komoot.com">Komoot</a> · <a href="https://www.alltrails.com">AllTrails</a> · <a href="https://www.outdooractive.com">Outdooractive</a> · <a href="https://hiking.waymarkedtrails.org">Waymarked Trails</a></p>
+ <h3>Escalada y ferratas</h3>
+ <p><a href="https://www.thecrag.com">theCrag</a> · <a href="https://27crags.com">27 Crags</a> · <a href="https://www.camptocamp.org">Camptocamp</a></p>
+ <h3>Bosque, mapas y cartografía</h3>
+ <p><a href="https://www.ign.es/iberpix/visor">IGN Iberpix</a> · <a href="https://www.miteco.gob.es">MITECO (Mapa Forestal)</a> · <a href="https://www.inaturalist.org">iNaturalist</a> · <a href="https://www.openstreetmap.org">OpenStreetMap</a></p>
+ <h3>Tiempo</h3>
+ <p><a href="https://www.aemet.es">AEMET</a> · <a href="https://www.windy.com">Windy</a> · <a href="https://open-meteo.com">Open-Meteo</a></p>
+ <p class="dim" style="margin-top:16px">Comprueba siempre la normativa de acampada y el riesgo de incendios de cada zona antes de salir.</p>
+</div></div>
+
+<div id="toast"></div>
+<div id="tabs"><button class="on" data-v="map">Mapa</button><button data-v="ruta">Ruta</button><button data-v="webs">Webs</button></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const toast=m=>{const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',2500)};
+const map=L.map('map',{zoomControl:false}).setView([36.72,-4.42],11);
+const osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+const topo=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,attribution:'© OpenTopoMap'});
+const sendas=L.tileLayer('https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png',{opacity:.85}).addTo(map);
+const G={vf:L.layerGroup().addTo(map),cl:L.layerGroup().addTo(map),cp:L.layerGroup().addTo(map),fo:L.layerGroup().addTo(map)},RL=L.layerGroup().addTo(map);
+const ICON={vf:'⛓️',cl:'🧗',cp:'⛺',fo:'🌲'},NAME={vf:'Vía ferrata',cl:'Zona de escalada',cp:'Acampada / refugio',fo:'Bosque'};
+const F={vf:['nwr["highway"="via_ferrata"]'],cl:['nwr["sport"="climbing"]["name"]'],cp:['nwr["tourism"="camp_site"]','nwr["tourism"="alpine_hut"]'],fo:['nwr["natural"="wood"]["leaf_type"]','nwr["landuse"="forest"]["leaf_type"]']};
+const on={se:true,vf:false,cl:false,cp:false,fo:false};let HIT=[],S=[],routeMode=false;
+try{S=JSON.parse(localStorage.ruta||'[]')}catch(e){}
+const save=()=>{try{localStorage.ruta=JSON.stringify(S)}catch(e){}};
+
+document.querySelectorAll('.chip[data-k]').forEach(b=>b.onclick=()=>{const k=b.dataset.k;on[k]=!on[k];b.classList.toggle('on',on[k]);
+ if(k=='se')on.se?sendas.addTo(map):map.removeLayer(sendas);else if(!on[k])G[k].clearLayers();else load()});
+$('#tp').onclick=e=>{const t=e.target.classList.toggle('on');t?(map.removeLayer(osm),topo.addTo(map).bringToBack()):(map.removeLayer(topo),osm.addTo(map).bringToBack())};
+$('#rm').onclick=e=>{routeMode=e.target.classList.toggle('on');toast(routeMode?'Toca el mapa para añadir puntos':'Modo ruta apagado')};
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.v,#tabs button').forEach(x=>x.classList.remove('on'));
+ b.classList.add('on');$('#v-'+b.dataset.v).classList.add('on');if(b.dataset.v=='map')map.invalidateSize();if(b.dataset.v=='ruta')rs();if(b.dataset.v=='webs')here()});
+$('#go').onclick=load;
+$('#q').onkeydown=async e=>{if(e.key!='Enter')return;try{const r=await(await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(e.target.value))).json();
+ if(r[0]){map.setView([r[0].lat,r[0].lon],12);e.target.blur()}else toast('No encontrado')}catch(x){toast('Sin conexión')}};
+
+async function load(){
+ if(map.getZoom()<10)return toast('Acércate más (zoom 10+) para buscar');
+ const b=map.getBounds(),bb=[b.getSouth(),b.getWest(),b.getNorth(),b.getEast()].join(','),keys=Object.keys(F).filter(k=>on[k]);
+ if(!keys.length)return toast('Activa alguna capa (ferratas, escalada…)');
+ toast('Buscando…');
+ for(const k of keys){
+  try{const q=`[out:json][timeout:25];(${F[k].map(f=>f+'('+bb+');').join('')});out center tags 80;`;
+   const d=await(await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(q)})).json();
+   G[k].clearLayers();
+   d.elements.forEach(el=>{const la=el.lat??el.center?.lat,lo=el.lon??el.center?.lon;if(la==null)return;
+    const i=HIT.push({k,la,lo,t:el.tags||{}})-1;
+    L.marker([la,lo],{icon:L.divIcon({html:ICON[k],className:'pin',iconSize:[24,24]})}).on('click',()=>show(i)).addTo(G[k])});
+   toast(d.elements.length+' resultados · '+NAME[k])}
+  catch(e){toast('Overpass saturado, reintenta en un momento')}}}
+
+const wx=c=>c<3?'☀️':c<50?'⛅':c<70?'🌧️':c<80?'❄️':'⛈️';
+const mins=s=>{if(!s)return 0;s=String(s);return s.includes(':')?(+s.split(':')[0]*60+ +s.split(':')[1]):+s||0};
+async function show(i){
+ const h=HIT[i],t=h.t,sh=$('#sheet');sh.style.display='block';
+ const keep=['via_ferrata_scale','duration','length','ele','climbing:grade:uiaa:max','climbing:routes','rock','leaf_type','leaf_cycle','genus','species','wood','tourism','fee','capacity','access'];
+ const tags=keep.filter(k=>t[k]).map(k=>`<span class="tag">${esc(k.replace('climbing:','').replace(/_/g,' '))}: ${esc(t[k])}</span>`).join('')||'<span class="dim">Sin detalles en OSM</span>';
+ sh.innerHTML=`<h2>${ICON[h.k]} ${esc(t.name||NAME[h.k])}</h2><div>${tags}</div>
+ <div id="w" class="dim" style="margin-top:8px">Cargando tiempo…</div>
+ <button class="btn" onclick="addS(${i})">+ Ruta</button><button class="btn s" onclick="$('#sheet').style.display='none'">Cerrar</button>
+ <p style="margin-top:8px"><a href="https://www.windy.com/${h.la}/${h.lo}?${h.la},${h.lo},11">Windy</a> · <a href="https://www.google.com/maps?q=${h.la},${h.lo}">Google Maps</a> · <a href="https://www.openstreetmap.org/?mlat=${h.la}&mlon=${h.lo}#map=15/${h.la}/${h.lo}">OSM</a></p>`;
+ try{const r=await(await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${h.la}&longitude=${h.lo}&current=temperature_2m,relative_humidity_2m,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max&timezone=auto&forecast_days=4`)).json();
+  const c=r.current,d=r.daily;
+  $('#w').innerHTML=`<b style="color:var(--ink)">${Math.round(c.temperature_2m)}°C</b> · humedad ${c.relative_humidity_2m}% · viento ${Math.round(c.wind_speed_10m)} km/h · altitud ${Math.round(r.elevation)} m`+
+   d.time.map((x,j)=>`<div class="day"><span>${wx(d.weather_code[j])} ${new Date(x).toLocaleDateString('es',{weekday:'short',day:'numeric'})}</span><span>${Math.round(d.temperature_2m_min[j])}° / ${Math.round(d.temperature_2m_max[j])}° · 💧${d.precipitation_probability_max[j]}% · UV ${Math.round(d.uv_index_max[j])}</span></div>`).join('')}catch(e){$('#w').textContent='Sin datos de tiempo (¿offline?)'}}
+
+function addS(i){const h=HIT[i];S.push({n:h.t.name||NAME[h.k],la:h.la,lo:h.lo,v:h.k=='vf',m:h.k=='vf'?(mins(h.t.duration)||180):0});save();toast('Añadido a la ruta ('+S.length+')');$('#sheet').style.display='none'}
+map.on('click',e=>{if(!routeMode)return $('#sheet').style.display='none';S.push({n:'Punto '+(S.length+1),la:+e.latlng.lat.toFixed(5),lo:+e.latlng.lng.toFixed(5),v:false,m:0});save();drawR();toast('Punto '+S.length)});
+function rs(){$('#stops').innerHTML=S.map((s,i)=>`<div class="stop ${s.v?'v2':''}"><b>${i+1}. ${esc(s.n)}</b>
+ <div style="margin-top:6px"><label><input type="checkbox" ${s.v?'checked':''} onchange="S[${i}].v=this.checked;S[${i}].m=S[${i}].v?(S[${i}].m||180):0;save();rs()"> ⛓️ Vía ferrata</label>
+ ${s.v?` &nbsp;<input type="number" value="${s.m}" onchange="S[${i}].m=+this.value;save()"> min`:''}
+ &nbsp;<button class="chip" onclick="mv(${i},-1)">↑</button><button class="chip" onclick="S.splice(${i},1);save();rs()">✕</button></div></div>`).join('')||'<p class="dim" style="margin-top:10px">Aún no hay puntos.</p>';drawR()}
+function mv(i,d){const j=i+d;if(j<0||j>=S.length)return;[S[i],S[j]]=[S[j],S[i]];save();rs()}
+function drawR(){RL.clearLayers();S.forEach((s,i)=>L.marker([s.la,s.lo],{icon:L.divIcon({html:`<div style="background:${s.v?'var(--rock)':'var(--moss)'};color:#14212b;font-weight:700;border-radius:50%;width:24px;height:24px;text-align:center;line-height:24px;border:2px solid #fff">${i+1}</div>`,className:'',iconSize:[24,24]})}).addTo(RL));
+ if(S.length>1)L.polyline(S.map(s=>[s.la,s.lo]),{color:'#e8c547',dashArray:'6 8',weight:3}).addTo(RL)}
+const hav=(a,b)=>{const R=6371,r=x=>x*Math.PI/180,dl=r(b.la-a.la),dn=r(b.lo-a.lo),x=Math.sin(dl/2)**2+Math.cos(r(a.la))*Math.cos(r(b.la))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(x))};
+const hm=m=>Math.floor(m/60)+'h'+String(Math.round(m%60)).padStart(2,'0'),clk=m=>String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(Math.round(m%60)).padStart(2,'0');
+async function calc(){
+ if(S.length<2)return $('#rsum').textContent='Añade al menos 2 puntos.';
+ $('#rsum').textContent='Calculando…';
+ try{const el=(await(await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${S.map(s=>s.la)}&longitude=${S.map(s=>s.lo)}`)).json()).elevation;
+  const sp=+$('#pace').value||4;let t=+$('#t0').value.split(':')[0]*60+ +$('#t0').value.split(':')[1],km=0,up=0,fer=0,out='';
+  S.forEach((s,i)=>{
+   if(i){const d=hav(S[i-1],s)*1.3,a=Math.max(0,el[i]-el[i-1]),m=d/sp*60+a/500*60;km+=d;up+=a;t+=m;out+=`<div class="leg">🥾 ${d.toFixed(1)} km · +${Math.round(a)} m · ${hm(m)}</div>`}
+   out+=`<div class="stop ${s.v?'v2':''}"><b>${clk(t)}</b> · ${esc(s.n)} <span class="dim">(${Math.round(el[i])} m)</span>${s.v?`<br>⛓️ Ferrata: ${hm(s.m)}`:''}</div>`;
+   if(s.v){t+=s.m;fer+=s.m;out+=`<div class="leg">Fin de ferrata ≈ ${clk(t)}</div>`}});
+  let sun='';try{const w=await(await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${S[0].la}&longitude=${S[0].lo}&daily=sunset&timezone=auto&forecast_days=1`)).json(),ss=w.daily.sunset[0].slice(11),sm=+ss.split(':')[0]*60+ +ss.split(':')[1];
+   sun=`<p style="margin-top:8px">🌇 Puesta de sol ${ss} · ${t>sm?'<b style="color:var(--rock)">terminas de noche, adelanta la salida</b>':'llegas con luz'}</p>`}catch(e){}
+  $('#rsum').innerHTML=`<h3>Resumen</h3><p><b>${km.toFixed(1)} km</b> andando · +${Math.round(up)} m · ferratas ${hm(fer)} · total ${hm(t-(+$('#t0').value.split(':')[0]*60+ +$('#t0').value.split(':')[1]))}</p>${sun}<p class="dim" style="margin-top:6px">Distancia en línea recta ×1,3 y regla de Naismith (+1 h cada 500 m de subida). Es una estimación: el sendero real puede variar.</p><h3>Itinerario</h3>${out}`;
+ }catch(e){$('#rsum').textContent='No se pudo calcular (sin conexión).'}}
+function shareR(){const x='Ruta:\n'+S.map((s,i)=>`${i+1}. ${s.n}${s.v?' (ferrata '+hm(s.m)+')':''} https://www.google.com/maps?q=${s.la},${s.lo}`).join('\n');navigator.share?navigator.share({text:x}).catch(()=>{}):navigator.clipboard.writeText(x).then(()=>toast('Copiado'))}
+function here(){const c=map.getCenter(),a=c.lat.toFixed(4),o=c.lng.toFixed(4);
+ $('#here').innerHTML=`<p><a href="https://www.windy.com/${a}/${o}?${a},${o},10">Windy</a> · <a href="https://www.google.com/maps/@${a},${o},13z">Google Maps</a> · <a href="https://hiking.waymarkedtrails.org/#?map=13/${a}/${o}">Senderos señalizados</a> · <a href="https://www.openstreetmap.org/#map=13/${a}/${o}">OSM</a> · <a href="https://www.wikiloc.com/wikiloc/map.do?lat=${a}&lon=${o}">Wikiloc</a></p>`}
+rs();drawR();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script></body></html>
